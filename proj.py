@@ -1,4 +1,5 @@
 import os, os.path
+import re
 import sys
 import time
 from sklearn.feature_extraction.text import CountVectorizer
@@ -104,9 +105,14 @@ def indexing(D,args):
     print("Indexing time passed: %.2fs." % time_passed)
     print("Indexing memory space: " + str(sys.getsizeof(inv_index)) + " bytes.")
 
-def ranking(d,order,I,p=7,l=1000000,model="tfidf"):
+def ranking(d,order,I,p=4,l=1000000,model="tfidf"):
     file = open(d,"r")
     filebody = file.read()
+    filebody = re.sub(r"[!][\n]+",'!',filebody)
+    filebody = re.sub(r"[?][\n]+",'?',filebody)
+    filebody = re.sub(r"[:][\n]+",':',filebody)
+    filebody = re.sub(r"[.][\n]+",'.',filebody)
+    filebody = re.sub(r"[\n]+",'.',filebody)
     sentences = sent_tokenize(filebody)
     if model == "tdidf":
         sentence_dict = create_tfidf_dict(sentences,d)
@@ -163,10 +169,40 @@ def visualize(d,order,I,p=7,l=1000000,model="tfidf"):
     f.write(doc.render())
     f.close()
 
+def recall(summary_sentences,ref_summary_sentences):
+    matching_relevant = 0
+    for sentence in summary_sentences:
+        if sentence in ref_summary_sentences:
+            matching_relevant += 1
+    return matching_relevant / len(ref_summary_sentences)
 
+def precision(summary_sentences,ref_summary_sentences):
+    matching_relevant = 0
+    for sentence in summary_sentences:
+        if sentence in ref_summary_sentences:
+            matching_relevant += 1
+    return matching_relevant / len(summary_sentences)
+
+def evaluation(D,S,I,args):
+    for doc,summary in zip(D,S):
+        rank = ranking(doc,"relevance",inv_index,p=4)[0]
+        file1 = open(summary,"r")
+        summarybody = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',file1.read())
+        summarybody = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',summarybody)
+        summarybody = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summarybody)
+        rank = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',rank)
+        rank = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',rank)
+        rank = re.sub(r'([a-z])\.([0-9])', r'\1. \2',rank)
+        ref_summary_sentences = sent_tokenize(summarybody)
+        summary_sentences = sent_tokenize(rank)
+        print(summary_sentences)
+        print(ref_summary_sentences)
+        print(recall(summary_sentences,ref_summary_sentences))
+        print(precision(summary_sentences,ref_summary_sentences))
 
 docs = sys.argv[1]
 doc = sys.argv[2]
 indexing(docs,None)
 store_idfs()
-visualize(doc,"relevance",inv_index)
+#visualize(doc,"relevance",inv_index)
+evaluation([doc],[sys.argv[3]],inv_index,0)
