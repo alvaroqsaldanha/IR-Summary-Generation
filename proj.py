@@ -5,6 +5,9 @@ from sklearn.feature_extraction.text import CountVectorizer
 from math import log
 from nltk import sent_tokenize
 import operator
+from dominate import document
+from dominate.tags import *
+import itertools
 
 inv_index = {}
 idfs = {}
@@ -111,23 +114,59 @@ def ranking(d,order,I,p=7,l=1000000,model="tfidf"):
         sentence_dict = create_tf_dict(sentences,d)
     else:
         sentence_dict = create_bm25_dict(sentences,d)
+    sorted_dict = dict(sorted(sentence_dict.items(), key=operator.itemgetter(1),reverse=True))
+    min_relevance = 0
+    if p <= len(sentence_dict.keys()):
+        min_relevance =  sentence_dict[list(sorted_dict)[p-1]]
     if order == "relevance":
-        sentence_dict = dict(sorted(sentence_dict.items(), key=operator.itemgetter(1),reverse=True))
+        sentence_dict = dict(itertools.islice(sorted_dict.items(), p))
+    else:
+        temp_dict = {}
+        for sentence in sentence_dict.keys():
+            if sentence_dict[sentence] >= min_relevance:
+                temp_dict[sentence] = sentence_dict[sentence]
+        sentence_dict = temp_dict
     summary = ""
-    sentence_count = 1
     char_count = 0
     for entry in sentence_dict.keys():
         char_count += len(entry)
-        if sentence_count < p and char_count < l:
+        if char_count < l:
             summary += entry
         else:
             break
-        sentence_count += 1
     file.close()
-    return summary
+    return (summary,sentence_dict)
+
+def visualize(d,order,I,p=7,l=1000000,model="tfidf"):
+    summary,sentence_dict = ranking(d,order,I,p,l,model)
+    file = open(d,"r")
+    filebody = file.read()
+    sentences = sent_tokenize(filebody)
+    file.close()
+    if order == "relevance":
+        dict_list = list(sentence_dict)
+    color = 70
+    with document(title='Summary of ' + d) as doc:
+        h1('Summary of ' + d )
+        for sentence in sentences:
+            if sentence_dict.get(sentence) != None:
+                if order == "relevance":
+                    curr_color = color + 30 * dict_list.index(sentence)
+                    b(div(sentence,style="color: rgb(0," + str(curr_color) + ',0)'))
+                else:
+                    b(sentence)
+            else:
+                div(sentence)
+        br()
+        div("Sentence relevance in ascending order from lighter to darker colors.",style="font-size: 10px")
+    f = open('summary.html', 'w')
+    f.write(doc.render())
+    f.close()
+
+
 
 docs = sys.argv[1]
 doc = sys.argv[2]
 indexing(docs,None)
 store_idfs()
-print(ranking(doc,"relevance",inv_index))
+visualize(doc,"relevance",inv_index)
