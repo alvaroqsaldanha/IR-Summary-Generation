@@ -8,6 +8,7 @@ from nltk import sent_tokenize
 import operator
 from dominate import document
 from dominate.tags import *
+from matplotlib.pyplot import plot, show
 import itertools
 
 inv_index = {}
@@ -105,7 +106,7 @@ def indexing(D,args):
     print("Indexing time passed: %.2fs." % time_passed)
     print("Indexing memory space: " + str(sys.getsizeof(inv_index)) + " bytes.")
 
-def ranking(d,order,I,p=4,l=1000000,model="tfidf"):
+def ranking(d,order,I,p=8,l=1000000,model="tfidf"):
     file = open(d,"r")
     filebody = file.read()
     filebody = re.sub(r"[!][\n]+",'!',filebody)
@@ -120,6 +121,7 @@ def ranking(d,order,I,p=4,l=1000000,model="tfidf"):
         sentence_dict = create_tf_dict(sentences,d)
     else:
         sentence_dict = create_bm25_dict(sentences,d)
+    full_dict = sentence_dict
     sorted_dict = dict(sorted(sentence_dict.items(), key=operator.itemgetter(1),reverse=True))
     min_relevance = 0
     if p <= len(sentence_dict.keys()):
@@ -141,10 +143,10 @@ def ranking(d,order,I,p=4,l=1000000,model="tfidf"):
         else:
             break
     file.close()
-    return (summary,sentence_dict)
+    return (summary,sentence_dict, full_dict)
 
 def visualize(d,order,I,p=7,l=1000000,model="tfidf"):
-    summary,sentence_dict = ranking(d,order,I,p,l,model)
+    summary,sentence_dict,full_dict= ranking(d,order,I,p,l,model)
     file = open(d,"r")
     filebody = file.read()
     sentences = sent_tokenize(filebody)
@@ -183,26 +185,77 @@ def precision(summary_sentences,ref_summary_sentences):
             matching_relevant += 1
     return matching_relevant / len(summary_sentences)
 
+def build_precision_recall_curve(ref_summary_sentences, summary_sentences): 
+    total_retrieved_docs = 0
+    relevant_retrieved_docs = 0
+    recall = []
+    precision = []
+    for sentence in summary_sentences:
+        total_retrieved_docs +=1
+        if sentence in ref_summary_sentences: 
+            relevant_retrieved_docs +=1 
+            current_recall = relevant_retrieved_docs / len(ref_summary_sentences)
+            recall.append(current_recall)
+            current_precision = relevant_retrieved_docs / total_retrieved_docs
+            precision.append(current_precision)
+    plot(recall,precision)
+    show()
+
+def mean_average_precision(rank, ref_summary_sentences):
+    average_precision = 0
+    relevant_docs = 0
+    total_retrieved_docs = 0
+    for sentence in rank.keys():
+        total_retrieved_docs += 1
+        if sentence in ref_summary_sentences:
+            relevant_docs += 1
+        average_precision += relevant_docs / total_retrieved_docs
+    mean_average_precision = average_precision / len(ref_summary_sentences)
+    print(mean_average_precision)
+
+def cumulative_gain(rank, ref_summary_sentences, summary_sentences):
+    true_positive_rates = []
+    supports = []
+    true_positives = 0 
+    true_negatives = 0
+    total_retrieved_docs = 0
+    for sentence in summary_sentences: 
+        total_retrieved_docs +=1
+        if sentence in ref_summary_sentences:
+            true_positives+=1
+        else:
+            true_negatives+=1
+        true_positive_rate = true_positives / len(ref_summary_sentences)
+        true_positive_rates.append(true_positive_rate)
+        support =  total_retrieved_docs / len(rank.keys())
+        supports.append(support)
+    plot(supports,true_positive_rates)
+    show()
+
+
 def evaluation(D,S,I,args):
-    for doc,summary in zip(D,S):
-        rank = ranking(doc,"relevance",inv_index,p=4)[0]
-        file1 = open(summary,"r")
+    for doc,summaryfile in zip(D,S):
+        full_rank = ranking(doc,"relevance",inv_index,p=8)
+        summary = full_rank[0]
+        rank = full_rank[2]
+        file1 = open(summaryfile,"r")
         summarybody = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',file1.read())
         summarybody = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',summarybody)
         summarybody = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summarybody)
-        rank = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',rank)
-        rank = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',rank)
-        rank = re.sub(r'([a-z])\.([0-9])', r'\1. \2',rank)
+        summary = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',summary)
+        summary = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',summary)
+        summary = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summary)
         ref_summary_sentences = sent_tokenize(summarybody)
-        summary_sentences = sent_tokenize(rank)
-        print(summary_sentences)
-        print(ref_summary_sentences)
+        summary_sentences = sent_tokenize(summary)
         print(recall(summary_sentences,ref_summary_sentences))
         print(precision(summary_sentences,ref_summary_sentences))
+        build_precision_recall_curve(ref_summary_sentences,summary_sentences)
+        mean_average_precision(rank,ref_summary_sentences)
+        cumulative_gain(rank,ref_summary_sentences,summary_sentences)
 
 docs = sys.argv[1]
 doc = sys.argv[2]
 indexing(docs,None)
 store_idfs()
-#visualize(doc,"relevance",inv_index)
+visualize(doc,"relevance",inv_index)
 evaluation([doc],[sys.argv[3]],inv_index,0)
