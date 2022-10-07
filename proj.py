@@ -1,4 +1,3 @@
-from optparse import check_builtin
 import os, os.path
 import re
 import sys
@@ -199,32 +198,25 @@ def create_results_directory():
         print("New results directory created")
     return path
 
-
 def build_precision_recall_graph(doc,recall, precision, p, l): 
-
     font1 = {'family':'serif','color':'blue','size':20}
     font2 = {'family':'serif','color':'darkred','size':15}
-
     if p != None: 
-        plt.title("The precision-recall graph for " + str(p) + " sentence(s)",font1)
+        plt.title("precision-recall for " + str(p) + " sentence(s)",font1)
     else: 
-        plt.title("The precision-recall graph for " + str(l) + "sentence size",font1)
+        plt.title("precision-recall for " + str(l) + " characters",font1)
     plt.xlabel("recall", font2)
     plt.ylabel("precision", font2)
-
     plt.plot(recall,precision)
-
     path = create_results_directory()
 
     if not os.path.isdir(path+"\\"+doc):
         os.mkdir(path+"\\"+doc)
-
     filename = "precision_recall_graph_" 
     if p != None: 
         filename+= str(p) + "_sentences"
     else: 
         filename+= str(l) +"_char_length"
-
     plt.savefig(path+"\\"+doc+"\\"+ filename)
 
 
@@ -241,7 +233,6 @@ def build_precision_recall_curve(doc,ref_summary_sentences, summary_sentences, p
             recall.append(current_recall)
             current_precision = relevant_retrieved_docs / total_retrieved_docs
             precision.append(current_precision)
-
     build_precision_recall_graph(doc,recall, precision, p, l)
 
 
@@ -257,24 +248,6 @@ def mean_average_precision(rank, ref_summary_sentences):
     mean_average_precision = average_precision / len(ref_summary_sentences)
     print(mean_average_precision)
 
-def cumulative_gain(rank, ref_summary_sentences, summary_sentences):
-    true_positive_rates = []
-    supports = []
-    true_positives = 0 
-    true_negatives = 0
-    total_retrieved_docs = 0
-    for sentence in summary_sentences: 
-        total_retrieved_docs +=1
-        if sentence in ref_summary_sentences:
-            true_positives+=1
-        else:
-            true_negatives+=1
-        true_positive_rate = true_positives / len(ref_summary_sentences)
-        true_positive_rates.append(true_positive_rate)
-        support =  total_retrieved_docs / len(rank.keys())
-        supports.append(support)
-
-
 def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
     for p_value in P:
         sentence_dict = dict(itertools.islice(rank.items(), p_value))
@@ -285,8 +258,16 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
         summary_sentences = sent_tokenize(summary)
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,p_value,None)
         mean_average_precision(sentence_dict,ref_summary_sentences)
+    for l_value in L:
+        summary = build_summary(rank,l_value)
+        summary = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',summary)
+        summary = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',summary)
+        summary = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summary)
+        summary_sentences = sent_tokenize(summary)
+        build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,None,l_value)
+        mean_average_precision(sentence_dict,ref_summary_sentences)
 
-def evaluation(D,S,I,P=[8,9,10,11,12,13,14,15,16,17,18,19,20,21,22],L=[250,500,750,1000,1250,1500,1750,2000]):
+def evaluation(D,S,I,P=[6,8,10,12],L=[100,200,300,400,500,750,1000,1500]):
     for doc,summaryfile in zip(D,S):
         full_rank = ranking(doc,"relevance",inv_index,p=8)
         rank = full_rank[2]
@@ -296,7 +277,6 @@ def evaluation(D,S,I,P=[8,9,10,11,12,13,14,15,16,17,18,19,20,21,22],L=[250,500,7
         summarybody = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summarybody)
         ref_summary_sentences = sent_tokenize(summarybody)
         summary_size_evaluation(doc.split("\\")[-1],rank,ref_summary_sentences,P,L)
-        ##cumulative_gain(rank,ref_summary_sentences,summary_sentences)
 
 docs = sys.argv[1]
 doc = sys.argv[2]
