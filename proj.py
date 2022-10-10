@@ -41,9 +41,42 @@ def idf(term):
     result = log(N/df)
     return result
 
-def store_idfs():
-    for term in inv_index.keys():
-        idfs[term] = idf(term)
+def index_document(filename,preprocessing):
+    global n_docs, avg_dl
+    file = open(filename,"r")
+    filebody = file.read()
+    if preprocessing == "bigram":
+        vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
+    else:
+        vectorizer = CountVectorizer()
+    X = vectorizer.fit_transform([filebody])
+    fileterms = vectorizer.get_feature_names_out()
+    avg_dl += len(fileterms)
+    term_count[filename] = len(fileterms)
+    matrix = X.toarray()[0]
+    for token in fileterms:
+        if inv_index.get(token) == None:
+            inv_index[token] = [(filename,matrix[vectorizer.vocabulary_[token]])]
+        elif filename not in inv_index[token]:
+            inv_index[token].append((filename,matrix[vectorizer.vocabulary_[token]]))
+    n_docs += 1
+    if preprocessing == "noun_phrases":
+        add_noun_phrases(filebody,filename)
+    file.close()
+            
+def indexing(D,preprocessing):
+    global n_docs, avg_dl
+    start = time.time()
+    for dirName, subdirList, fileList in os.walk(D):
+        for name in fileList:
+            index_document(os.path.join(dirName, name),preprocessing)
+    end = time.time()
+    avg_dl = avg_dl / n_docs
+    time_passed = end-start
+    print("Indexing time passed: %.2fs." % time_passed)
+    print("Indexing memory space: " + str(sys.getsizeof(inv_index)) + " bytes.")
+
+#################### RANKING ####################
 
 def create_tf_dict(sentences,d):
     tf_dict = {}
@@ -93,62 +126,29 @@ def create_bm25_dict(sentences,d):
         bm25_dict[sentence] = term_bm25 / len(fileterms)
     return bm25_dict
 
-def index_document(filename,preprocessing):
-    global n_docs, avg_dl
-    file = open(filename,"r")
-    filebody = file.read()
-    if preprocessing == "bigram":
-        vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
-    else:
-        vectorizer = CountVectorizer()
-    X = vectorizer.fit_transform([filebody])
-    fileterms = vectorizer.get_feature_names_out()
-    avg_dl += len(fileterms)
-    term_count[filename] = len(fileterms)
-    matrix = X.toarray()[0]
-    for token in fileterms:
-        if inv_index.get(token) == None:
-            inv_index[token] = [(filename,matrix[vectorizer.vocabulary_[token]])]
-        elif filename not in inv_index[token]:
-            inv_index[token].append((filename,matrix[vectorizer.vocabulary_[token]]))
-    n_docs += 1
-    if preprocessing == "noun_phrases":
-        add_noun_phrases(filebody,filename)
-    file.close()
-            
-def indexing(D,preprocessing):
-    global n_docs, avg_dl
-    start = time.time()
-    for dirName, subdirList, fileList in os.walk(D):
-        for name in fileList:
-            index_document(os.path.join(dirName, name),preprocessing)
-    end = time.time()
-    avg_dl = avg_dl / n_docs
-    time_passed = end-start
-    print("Indexing time passed: %.2fs." % time_passed)
-    print("Indexing memory space: " + str(sys.getsizeof(inv_index)) + " bytes.")
-
 def build_summary(sentence_dict,l):
     summary = ""
     char_count = 0
+    sentence_count = 0
     for entry in sentence_dict.keys():
         char_count += len(entry)
         if char_count < l:
             summary += entry
+            sentence_count += 1
         else:
             break
-    return summary
+    return summary,sentence_count
 
-def ranking(d,order,I,p=8,l=1000000,model="tfidf"):
+def ranking(d,order,I,p=8,l=500,model="tfidf"):
     file = open(d,"r")
     filebody = file.read()
-    filebody = re.sub(r"[!][\n]+",'!',filebody)
-    filebody = re.sub(r"[?][\n]+",'?',filebody)
-    filebody = re.sub(r"[:][\n]+",':',filebody)
-    filebody = re.sub(r"[.][\n]+",'.',filebody)
-    filebody = re.sub(r"[\n]+",'.',filebody)
+    filebody = re.sub(r"[!][\n]+",'! ',filebody)
+    filebody = re.sub(r"[?][\n]+",'? ',filebody)
+    filebody = re.sub(r"[:][\n]+",': ',filebody)
+    filebody = re.sub(r"[.][\n]+",'. ',filebody)
+    filebody = re.sub(r"[\n]+",'. ',filebody)
     sentences = sent_tokenize(filebody)
-    if model == "tdidf":
+    if model == "tfidf":
         sentence_dict = create_tfidf_dict(sentences,d)
     elif model == "tf":
         sentence_dict = create_tf_dict(sentences,d)
@@ -167,7 +167,8 @@ def ranking(d,order,I,p=8,l=1000000,model="tfidf"):
             if sentence_dict[sentence] >= min_relevance:
                 temp_dict[sentence] = sentence_dict[sentence]
         sentence_dict = temp_dict
-    summary = build_summary(sentence_dict,l)
+    summary, sentence_count = build_summary(sentence_dict,l)
+    sentence_dict = dict(itertools.islice(sentence_dict.items(), sentence_count))
     file.close()
     return (summary,sentence_dict, full_dict)
 
@@ -224,11 +225,11 @@ def create_mmr_summary(original_sentences,current_sentences,lb,mmr_rank,summary,
 def get_mmr_summary(doc,lb):
   file = open(doc,"r")
   filebody = file.read()
-  filebody = re.sub(r"[!][\n]+",'!',filebody)
-  filebody = re.sub(r"[?][\n]+",'?',filebody)
-  filebody = re.sub(r"[:][\n]+",':',filebody)
-  filebody = re.sub(r"[.][\n]+",'.',filebody)
-  filebody = re.sub(r"[\n]+",'.',filebody)
+  filebody = re.sub(r"[!][\n]+",'! ',filebody)
+  filebody = re.sub(r"[?][\n]+",'? ',filebody)
+  filebody = re.sub(r"[:][\n]+",': ',filebody)
+  filebody = re.sub(r"[.][\n]+",'. ',filebody)
+  filebody = re.sub(r"[\n]+",'. ',filebody)
   sentences = sent_tokenize(filebody)
   original_sentences = sentences.copy()
   mmr_rank = create_mmr_rank(original_sentences,sentences,lb,[])
@@ -263,7 +264,7 @@ def visualize(d,order,I,p=7,l=1000000,model="tfidf"):
                 div(sentence)
         br()
         div("Sentence relevance in ascending order from lighter to darker colors.",style="font-size: 10px")
-    f = open('summary_' + d + '.html', 'w')
+    f = open('summary_' + d.split('\\')[-1] + '.html', 'w')
     f.write(doc.render())
     f.close()
     return summary
@@ -360,12 +361,18 @@ def evaluation(D,S,I,P=[6,8,10,12],L=[100,200,300,400,500,750,1000,1500]):
 
 ### AUXILIARY FUNCTIONS ###
 
+def store_idfs():
+    for term in inv_index.keys():
+        idfs[term] = idf(term)
+
 def build_document_list(path):
     evaluation_list = [] 
     for dirName, subdirList, fileList in os.walk(path):
             for name in fileList:
                 evaluation_list.append(os.path.join(dirName,name))
     return evaluation_list
+
+### MAIN ###
 
 print("Please make sure BBC News Summary is in the same directory as this script.")
 print("Directory structure should be .\BBC News Summary\\News Articles\\")
@@ -395,3 +402,4 @@ while ipt != q:
         evaluation(evaluation_list, reference_list, inv_index)
     elif ipt == 'q':
         exit()
+
