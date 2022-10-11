@@ -142,6 +142,7 @@ def build_summary(sentence_dict,l):
 def ranking(d,order,I,p=8,l=500,model="tfidf"):
     file = open(d,"r")
     filebody = file.read()
+    filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
     filebody = re.sub(r"[!][\n]+",'! ',filebody)
     filebody = re.sub(r"[?][\n]+",'? ',filebody)
     filebody = re.sub(r"[:][\n]+",': ',filebody)
@@ -225,6 +226,7 @@ def create_mmr_summary(original_sentences,current_sentences,lb,mmr_rank,summary,
 def get_mmr_summary(doc,lb):
   file = open(doc,"r")
   filebody = file.read()
+  filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
   filebody = re.sub(r"[!][\n]+",'! ',filebody)
   filebody = re.sub(r"[?][\n]+",'? ',filebody)
   filebody = re.sub(r"[:][\n]+",': ',filebody)
@@ -241,6 +243,7 @@ def visualize(d,order,I,p=7,l=1000000,model="tfidf"):
     summary,sentence_dict,full_dict= ranking(d,order,I,p,l,model)
     file = open(d,"r")
     filebody = file.read()
+    filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
     filebody = re.sub(r"[!][\n]+",'! ',filebody)
     filebody = re.sub(r"[?][\n]+",'? ',filebody)
     filebody = re.sub(r"[:][\n]+",': ',filebody)
@@ -325,32 +328,34 @@ def mean_average_precision(rank, ref_summary_sentences):
         total_retrieved_docs += 1
         if sentence in ref_summary_sentences:
             relevant_docs += 1
-        average_precision += relevant_docs / total_retrieved_docs
+            average_precision += relevant_docs / total_retrieved_docs
     mean_average_precision = average_precision / len(ref_summary_sentences)
-    print(mean_average_precision)
+    return mean_average_precision
 
 def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
     for p_value in P:
         sentence_dict = dict(itertools.islice(rank.items(), p_value))
-        summary = build_summary(sentence_dict,1000000)
+        summary = build_summary(sentence_dict,1000000)[0]
         summary = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',summary)
         summary = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',summary)
         summary = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summary)
         summary_sentences = sent_tokenize(summary)
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,p_value,None)
-        mean_average_precision(sentence_dict,ref_summary_sentences)
+        map = mean_average_precision(sentence_dict,ref_summary_sentences)
+        print("Mean Average Precision for document " + doc + " for summaries with " + str(p_value) +" sentences:\n" + str(map) )
     for l_value in L:
-        summary = build_summary(rank,l_value)
+        summary = build_summary(rank,l_value)[0]
         summary = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',summary)
         summary = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',summary)
         summary = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summary)
         summary_sentences = sent_tokenize(summary)
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,None,l_value)
-        mean_average_precision(sentence_dict,ref_summary_sentences)
+        map = mean_average_precision(sentence_dict,ref_summary_sentences)
+        print("Mean Average Precision for document " + doc + " for summaries with " + str(l_value) + " sentence size:\n" +str(map) )
 
-def evaluation(D,S,I,P=[6,8,10,12],L=[100,200,300,400,500,750,1000,1500]):
+def evaluation(D,S,I,P=[6,8,10,12],L=[100,200,300,400,500,750,1000,1500],model="tfidf"):
     for doc,summaryfile in zip(D,S):
-        full_rank = ranking(doc,"relevance",inv_index,p=8)
+        full_rank = ranking(doc,"relevance",inv_index,model="tfidf")
         rank = full_rank[2]
         file1 = open(summaryfile,"r")
         summarybody = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',file1.read())
@@ -372,13 +377,55 @@ def build_document_list(path):
                 evaluation_list.append(os.path.join(dirName,name))
     return evaluation_list
 
+def term_distribution(docs,summaries):
+    docs_content = []
+    for dirName, subdirList, fileList in os.walk(docs):
+        for name in fileList:
+            file = open(os.path.join(dirName,name),"r")
+            docs_content.append(file.read())
+            file.close()
+    vectorizer = CountVectorizer()
+    X = vectorizer.fit_transform(docs_content)
+    terms = vectorizer.get_feature_names_out()
+    term_count = X.toarray().sum(axis=0)
+    zip_iterator = zip(terms, term_count)
+    sorted_dict = dict(sorted(dict(zip_iterator).items(), key=operator.itemgetter(1),reverse=True))
+    sorted_dict = dict(itertools.islice(sorted_dict.items(), 30))
+    plt.bar(sorted_dict.keys(), sorted_dict.values(), color ='maroon',
+        width = 0.4)
+    plt.xlabel("Term")
+    plt.ylabel("Frequency")
+    plt.title("Term/Frequency for documents.")
+    plt.show()
+    summaries_content = []
+    for dirName, subdirList, fileList in os.walk(summaries):
+        for name in fileList:
+            file = open(os.path.join(dirName,name),"r")
+            summaries_content.append(file.read())
+            file.close()
+    vectorizer = CountVectorizer()
+    X = vectorizer.fit_transform(summaries_content)
+    terms = vectorizer.get_feature_names_out()
+    term_count = X.toarray().sum(axis=0)
+    zip_iterator = zip(terms, term_count)
+    sorted_dict = dict(sorted(dict(zip_iterator).items(), key=operator.itemgetter(1),reverse=True))
+    sorted_dict = dict(itertools.islice(sorted_dict.items(), 30))
+    plt.bar(sorted_dict.keys(), sorted_dict.values(), color ='maroon',
+        width = 0.4)
+    plt.xlabel("Term")
+    plt.ylabel("Frequency")
+    plt.title("Term/Frequency for summaries.")
+    plt.show()
+
 ### MAIN ###
 
 print("Please make sure BBC News Summary is in the same directory as this script.")
 print("Directory structure should be .\BBC News Summary\\News Articles\\")
 docs = '.\BBC News Summary\\News Articles\\'
+summaries = '.\BBC News Summary\\Summaries\\'
 ipt = ''
 
+term_distribution(docs,summaries)
 indexing(docs,None)
 store_idfs()
 
