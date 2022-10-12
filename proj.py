@@ -90,7 +90,7 @@ def create_tf_dict(sentences,d):
             for doc in inv_index[term]:
                 if doc[0] == d:
                     tn = doc[1]
-            term_tf += 1 + math.log10(tn)
+            term_tf += tn/total_term_count
         tf_dict[sentence] = term_tf / sparse.csr_matrix.sum(X)
     return tf_dict
 
@@ -106,7 +106,7 @@ def create_tfidf_dict(sentences,d):
             for doc in inv_index[term]:
                 if doc[0] == d:
                     tn = doc[1]
-            term_tfidf += idfs[term] * (1+math.log10(tn))
+            term_tfidf += idfs[term] * (tn/total_term_count)
         tfidf_dict[sentence] = term_tfidf / sparse.csr_matrix.sum(X)
     return tfidf_dict
 
@@ -142,6 +142,7 @@ def build_summary(sentence_dict,l):
 def ranking(d,order,I,p=8,l=500,model="tfidf"):
     file = open(d,"r")
     filebody = file.read()
+    filebody = re.sub(r"[" "][\n]+",' ',filebody)
     filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
     filebody = re.sub(r"[!][\n]+",'! ',filebody)
     filebody = re.sub(r"[?][\n]+",'? ',filebody)
@@ -226,12 +227,13 @@ def create_mmr_summary(original_sentences,current_sentences,lb,mmr_rank,summary,
 def get_mmr_summary(doc,lb):
   file = open(doc,"r")
   filebody = file.read()
+  filebody = re.sub(r"[" "][\n]+",' ',filebody)
   filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
   filebody = re.sub(r"[!][\n]+",'! ',filebody)
   filebody = re.sub(r"[?][\n]+",'? ',filebody)
   filebody = re.sub(r"[:][\n]+",': ',filebody)
   filebody = re.sub(r"[.][\n]+",'. ',filebody)
-  filebody = re.sub(r"[\n]+",'. ',filebody)
+  filebody = re.sub(r"[\n]+",". ",filebody)
   sentences = sent_tokenize(filebody)
   original_sentences = sentences.copy()
   mmr_rank = create_mmr_rank(original_sentences,sentences,lb,[])
@@ -243,6 +245,7 @@ def visualize(d,order,I,p=7,l=1000000,model="tfidf"):
     summary,sentence_dict,full_dict= ranking(d,order,I,p,l,model)
     file = open(d,"r")
     filebody = file.read()
+    filebody = re.sub(r"[" "][\n]+",' ',filebody)
     filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
     filebody = re.sub(r"[!][\n]+",'! ',filebody)
     filebody = re.sub(r"[?][\n]+",'? ',filebody)
@@ -293,6 +296,9 @@ def build_precision_recall_graph(doc,recall, precision, p, l):
     plt.xlabel("recall", font2)
     plt.ylabel("precision", font2)
     plt.plot(recall,precision)
+    if(len(recall) == 0 ): 
+        return 
+
     path = create_results_directory()
 
     if not os.path.isdir(path+"\\"+doc):
@@ -333,6 +339,23 @@ def mean_average_precision(rank, ref_summary_sentences):
     mean_average_precision = average_precision / len(ref_summary_sentences)
     return mean_average_precision
 
+def plot_map_variation(map_for_p, x_axis_name, x_axis_values, doc): 
+    if len(map_for_p) == 0: 
+        return
+    font1 = {'family':'serif','color':'blue','size':20}
+    font2 = {'family':'serif','color':'darkred','size':15}
+    plt.title("plot map variation in relation to " + x_axis_name) 
+    plt.xlabel(x_axis_name)
+    plt.ylabel("map")
+    plt.plot(x_axis_values,map_for_p)
+    path = create_results_directory()
+    if not os.path.isdir(path+"\\"+doc):
+        os.mkdir(path+"\\"+doc)
+    filename = "map_variation_in_"+ x_axis_name
+    plt.savefig(path+"\\"+doc+"\\"+ filename)
+    plt.clf()
+
+
 def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
     map_for_p = []
     for p_value in P:
@@ -344,8 +367,11 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
         summary_sentences = sent_tokenize(summary)
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,p_value,None)
         map = mean_average_precision(sentence_dict,ref_summary_sentences)
-
+        map_for_p.append(map)
         #print("Mean Average Precision for document " + doc + " for summaries with " + str(p_value) +" sentences:\n" + str(map) )
+    plot_map_variation(map_for_p, "p_values", P, doc)
+
+    map_for_l = []
     for l_value in L:
         summary = build_summary(rank,l_value)[0]
         summary = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',summary)
@@ -354,10 +380,26 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
         summary_sentences = sent_tokenize(summary)
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,None,l_value)
         map = mean_average_precision(sentence_dict,ref_summary_sentences)
+        map_for_l.append(map)
         #print("Mean Average Precision for document " + doc + " for summaries with " + str(l_value) + " sentence size:\n" +str(map) )
+    plot_map_variation(map_for_l,"l_values", L, doc)
+    return map_for_p, map_for_l
 
-def evaluation(D,S,I,P=[6,8,10,12],L=[100,200,300,400,500,750,1000,1500],model="tfidf"):
+def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tfidf"):
+    map_for_p_docs = []
+
+    i = 0
+    for i in range(len(P)): 
+        map_for_p_docs.append(0)
+
+    map_for_l_docs = []
+
+    i = 0
+    for i in range(len(L)): 
+        map_for_l_docs.append(0)
+
     for doc,summaryfile in zip(D,S):
+        print("Status:" + doc)
         full_rank = ranking(doc,"relevance",inv_index,model="tfidf")
         rank = full_rank[2]
         file1 = open(summaryfile,"r")
@@ -365,7 +407,34 @@ def evaluation(D,S,I,P=[6,8,10,12],L=[100,200,300,400,500,750,1000,1500],model="
         summarybody = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',summarybody)
         summarybody = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summarybody)
         ref_summary_sentences = sent_tokenize(summarybody)
-        summary_size_evaluation(doc.split("\\")[-1],rank,ref_summary_sentences,P,L)
+        map_for_p, map_for_l = summary_size_evaluation(doc.split("\\")[-1],rank,ref_summary_sentences,P,L)
+        
+        i = 0 
+        for i in range(len(map_for_p)): 
+            map_for_p_docs[i] += map_for_p[i]
+            
+
+        i = 0
+        for i in range(len(map_for_l)): 
+            map_for_l_docs[i] += map_for_l[i]
+            
+
+    i = 0
+    for i in range(len(map_for_p_docs)): 
+        map_for_p_docs[i] = map_for_p_docs[i] / len(D)
+
+    plot_map_variation(map_for_p_docs, "p_value", P, "general")
+
+    i = 0
+    for i in range(len(map_for_l_docs)): 
+        map_for_l_docs[i] = map_for_l_docs[i] / len(D)
+
+    plot_map_variation(map_for_l_docs, "l_value", L, "general")
+
+
+
+
+        
 
 ### AUXILIARY FUNCTIONS ###
 
