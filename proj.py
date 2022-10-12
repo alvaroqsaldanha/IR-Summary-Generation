@@ -22,6 +22,16 @@ avg_dl = 0
 
 #################### TEXT PROCESSING AND INDEXING ####################
 
+def file_body_processing(filebody): 
+    filebody = re.sub(r"[" "][\n]+",' ',filebody)
+    filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
+    filebody = re.sub(r"[!][\n]+",'! ',filebody)
+    filebody = re.sub(r"[?][\n]+",'? ',filebody)
+    filebody = re.sub(r"[:][\n]+",': ',filebody)
+    filebody = re.sub(r"[.][\n]+",'. ',filebody)
+    filebody = re.sub(r"[\n]+",'. ',filebody)
+    return filebody
+
 def add_noun_phrases(filebody,filename):
   nlp = spacy.load('en_core_web_sm')
   doc = nlp(filebody)
@@ -142,13 +152,7 @@ def build_summary(sentence_dict,l):
 def ranking(d,order,I,p=8,l=500,model="tfidf"):
     file = open(d,"r")
     filebody = file.read()
-    filebody = re.sub(r"[" "][\n]+",' ',filebody)
-    filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
-    filebody = re.sub(r"[!][\n]+",'! ',filebody)
-    filebody = re.sub(r"[?][\n]+",'? ',filebody)
-    filebody = re.sub(r"[:][\n]+",': ',filebody)
-    filebody = re.sub(r"[.][\n]+",'. ',filebody)
-    filebody = re.sub(r"[\n]+",'. ',filebody)
+    filebody = file_body_processing(filebody)
     sentences = sent_tokenize(filebody)
     if model == "tfidf":
         sentence_dict = create_tfidf_dict(sentences,d)
@@ -227,13 +231,7 @@ def create_mmr_summary(original_sentences,current_sentences,lb,mmr_rank,summary,
 def get_mmr_summary(doc,lb):
   file = open(doc,"r")
   filebody = file.read()
-  filebody = re.sub(r"[" "][\n]+",' ',filebody)
-  filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
-  filebody = re.sub(r"[!][\n]+",'! ',filebody)
-  filebody = re.sub(r"[?][\n]+",'? ',filebody)
-  filebody = re.sub(r"[:][\n]+",': ',filebody)
-  filebody = re.sub(r"[.][\n]+",'. ',filebody)
-  filebody = re.sub(r"[\n]+",". ",filebody)
+  filebody = file_body_processing(filebody)
   sentences = sent_tokenize(filebody)
   original_sentences = sentences.copy()
   mmr_rank = create_mmr_rank(original_sentences,sentences,lb,[])
@@ -245,13 +243,7 @@ def visualize(d,order,I,p=7,l=1000000,model="tfidf"):
     summary,sentence_dict,full_dict= ranking(d,order,I,p,l,model)
     file = open(d,"r")
     filebody = file.read()
-    filebody = re.sub(r"[" "][\n]+",' ',filebody)
-    filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
-    filebody = re.sub(r"[!][\n]+",'! ',filebody)
-    filebody = re.sub(r"[?][\n]+",'? ',filebody)
-    filebody = re.sub(r"[:][\n]+",': ',filebody)
-    filebody = re.sub(r"[.][\n]+",'. ',filebody)
-    filebody = re.sub(r"[\n]+",'. ',filebody)
+    filebody = file_body_processing(filebody)
     sentences = sent_tokenize(filebody)
     file.close()
     if order == "relevance":
@@ -424,6 +416,7 @@ def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tf
         map_for_p_docs[i] = map_for_p_docs[i] / len(D)
 
     plot_map_variation(map_for_p_docs, "p_value", P, "general")
+
 
     i = 0
     for i in range(len(map_for_l_docs)): 
