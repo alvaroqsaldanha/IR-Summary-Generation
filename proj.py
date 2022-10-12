@@ -23,7 +23,11 @@ avg_dl = 0
 #################### TEXT PROCESSING AND INDEXING ####################
 
 def file_body_processing(filebody): 
-    filebody = re.sub(r"[" "][\n]+",' ',filebody)
+    filebody = re.sub(r"[\n]+[.]",'. ',filebody)
+    filebody = re.sub(r"[:][-][')']",'',filebody)    
+    filebody = re.sub(r"[\'][\']", '\"', filebody)
+    filebody = re.sub(r"S.T.A.L.K.E.R.",'',filebody)
+    filebody = re.sub(r"[' '][\n]+",'\n',filebody)
     filebody = re.sub(r"[\"][\n]+",'\" ',filebody)
     filebody = re.sub(r"[!][\n]+",'! ',filebody)
     filebody = re.sub(r"[?][\n]+",'? ',filebody)
@@ -108,6 +112,7 @@ def create_tfidf_dict(sentences,d):
     tfidf_dict = {}
     total_term_count = term_count[d]
     for sentence in sentences:
+        #print("Sentence:" + sentence)
         term_tfidf = 0
         vectorizer = CountVectorizer()
         X = vectorizer.fit_transform([sentence])
@@ -152,6 +157,7 @@ def build_summary(sentence_dict,l):
 def ranking(d,order,I,p=8,l=500,model="tfidf"):
     file = open(d,"r")
     filebody = file.read()
+    #print("1:" + repr(filebody))
     filebody = file_body_processing(filebody)
     sentences = sent_tokenize(filebody)
     if model == "tfidf":
@@ -424,6 +430,7 @@ def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tf
 
     plot_map_variation(map_for_l_docs, "l_value", L, "general")
 
+    return 
 
 
 
