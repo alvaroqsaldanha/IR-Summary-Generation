@@ -4,7 +4,7 @@ import sys
 import time
 from urllib.parse import _NetlocResultMixinStr
 from sklearn.feature_extraction.text import CountVectorizer
-from math import log
+import math
 from nltk import sent_tokenize
 import operator
 from dominate import document
@@ -12,7 +12,7 @@ from dominate.tags import *
 import matplotlib.pyplot as plt 
 import itertools
 import spacy
-from scipy import spatial
+from scipy import spatial, sparse
 
 inv_index = {}
 idfs = {}
@@ -38,7 +38,7 @@ def idf(term):
     global n_docs 
     N = n_docs + 1 # total number of documents
     df = len(inv_index[term]) # total number of documents where term appears
-    result = log(N/df)
+    result = math.log10(N/df)
     return result
 
 def index_document(filename,preprocessing):
@@ -90,8 +90,8 @@ def create_tf_dict(sentences,d):
             for doc in inv_index[term]:
                 if doc[0] == d:
                     tn = doc[1]
-            term_tf += tn / total_term_count
-        tf_dict[sentence] = term_tf / len(fileterms)
+            term_tf += 1 + math.log10(tn)
+        tf_dict[sentence] = term_tf / sparse.csr_matrix.sum(X)
     return tf_dict
 
 def create_tfidf_dict(sentences,d):
@@ -106,8 +106,8 @@ def create_tfidf_dict(sentences,d):
             for doc in inv_index[term]:
                 if doc[0] == d:
                     tn = doc[1]
-            term_tfidf += idfs[term] * (tn / total_term_count)
-        tfidf_dict[sentence] = term_tfidf / len(fileterms)
+            term_tfidf += idfs[term] * (1+math.log10(tn))
+        tfidf_dict[sentence] = term_tfidf / sparse.csr_matrix.sum(X)
     return tfidf_dict
 
 def create_bm25_dict(sentences,d):
@@ -123,7 +123,7 @@ def create_bm25_dict(sentences,d):
                 if doc[0] == d:
                     tn = doc[1]
             term_bm25 += (idfs[term] * (2.2 * tn)) / (tn + 1.2 * (0.25 + 0.75 * (total_term_count / avg_dl)))
-        bm25_dict[sentence] = term_bm25 / len(fileterms)
+        bm25_dict[sentence] = term_bm25 / sparse.csr_matrix.sum(X)
     return bm25_dict
 
 def build_summary(sentence_dict,l):
@@ -303,6 +303,7 @@ def build_precision_recall_graph(doc,recall, precision, p, l):
     else: 
         filename+= str(l) +"_char_length"
     plt.savefig(path+"\\"+doc+"\\"+ filename)
+    plt.clf()
 
 
 def build_precision_recall_curve(doc,ref_summary_sentences, summary_sentences, p, l): 
@@ -333,6 +334,7 @@ def mean_average_precision(rank, ref_summary_sentences):
     return mean_average_precision
 
 def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
+    map_for_p = []
     for p_value in P:
         sentence_dict = dict(itertools.islice(rank.items(), p_value))
         summary = build_summary(sentence_dict,1000000)[0]
@@ -342,7 +344,8 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
         summary_sentences = sent_tokenize(summary)
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,p_value,None)
         map = mean_average_precision(sentence_dict,ref_summary_sentences)
-        print("Mean Average Precision for document " + doc + " for summaries with " + str(p_value) +" sentences:\n" + str(map) )
+
+        #print("Mean Average Precision for document " + doc + " for summaries with " + str(p_value) +" sentences:\n" + str(map) )
     for l_value in L:
         summary = build_summary(rank,l_value)[0]
         summary = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',summary)
@@ -351,7 +354,7 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
         summary_sentences = sent_tokenize(summary)
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,None,l_value)
         map = mean_average_precision(sentence_dict,ref_summary_sentences)
-        print("Mean Average Precision for document " + doc + " for summaries with " + str(l_value) + " sentence size:\n" +str(map) )
+        #print("Mean Average Precision for document " + doc + " for summaries with " + str(l_value) + " sentence size:\n" +str(map) )
 
 def evaluation(D,S,I,P=[6,8,10,12],L=[100,200,300,400,500,750,1000,1500],model="tfidf"):
     for doc,summaryfile in zip(D,S):
@@ -390,7 +393,7 @@ def term_distribution(docs,summaries):
     term_count = X.toarray().sum(axis=0)
     zip_iterator = zip(terms, term_count)
     sorted_dict = dict(sorted(dict(zip_iterator).items(), key=operator.itemgetter(1),reverse=True))
-    sorted_dict = dict(itertools.islice(sorted_dict.items(), 30))
+    sorted_dict = dict(itertools.islice(sorted_dict.items(), 12))
     plt.bar(sorted_dict.keys(), sorted_dict.values(), color ='maroon',
         width = 0.4)
     plt.xlabel("Term")
@@ -409,7 +412,7 @@ def term_distribution(docs,summaries):
     term_count = X.toarray().sum(axis=0)
     zip_iterator = zip(terms, term_count)
     sorted_dict = dict(sorted(dict(zip_iterator).items(), key=operator.itemgetter(1),reverse=True))
-    sorted_dict = dict(itertools.islice(sorted_dict.items(), 30))
+    sorted_dict = dict(itertools.islice(sorted_dict.items(), 12))
     plt.bar(sorted_dict.keys(), sorted_dict.values(), color ='maroon',
         width = 0.4)
     plt.xlabel("Term")
