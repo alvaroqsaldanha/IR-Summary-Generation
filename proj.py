@@ -1,7 +1,9 @@
+from binascii import b2a_uu
 import os, os.path
 import re
 import sys
 import time
+from unicodedata import category
 from urllib.parse import _NetlocResultMixinStr
 from sklearn.feature_extraction.text import CountVectorizer
 import math
@@ -12,6 +14,7 @@ from dominate.tags import *
 import matplotlib.pyplot as plt 
 import itertools
 import spacy
+import statistics 
 from scipy import spatial, sparse
 
 inv_index = {}
@@ -385,6 +388,7 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
 
 def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tfidf"):
     map_for_p_docs = []
+    std_for_p_docs = []
 
     i = 0
     for i in range(len(P)): 
@@ -410,6 +414,8 @@ def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tf
         i = 0 
         for i in range(len(map_for_p)): 
             map_for_p_docs[i] += map_for_p[i]
+            if i == 4:
+                std_for_p_docs.append(map_for_p[i])
             
 
         i = 0
@@ -430,7 +436,10 @@ def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tf
 
     plot_map_variation(map_for_l_docs, "l_value", L, "general")
 
-    return 
+    average_p_precision = map_for_p_docs[4]
+    std_dv_map = statistics.stdev(std_for_p_docs)
+    return average_p_precision, std_dv_map
+    
 
 
 
@@ -489,6 +498,48 @@ def term_distribution(docs,summaries):
     plt.title("Term/Frequency for summaries.")
     plt.show()
 
+def build_comparison_graph(map_by_category, map_stdv_by_category):
+    plt.bar(["sport","business","politics","entertainment","tech"], map_by_category,yerr=map_stdv_by_category)
+    plt.ylabel("Mean Average Precision")
+    plt.xlabel("Categories")
+    plt.title("Mean Average Precision in relation to News Category")
+    path = create_results_directory()
+    if not os.path.isdir(path+"\\general"):
+        os.mkdir(path+"\\general")
+    filename = "map_for_category"
+    plt.savefig(path+"\\"+"general"+"\\"+ filename)
+    plt.show()
+    plt.clf()
+    
+
+
+
+def build_category_sets(): 
+    category_sets = []
+    sports_set = "."+ os.sep + "BBC News Summary" + os.sep + "News Articles" + os.sep + "sport"
+    business_set =  "."+ os.sep + "BBC News Summary" + os.sep + "News Articles" + os.sep + "business"
+    politics_set =  "."+ os.sep + "BBC News Summary" + os.sep + "News Articles" + os.sep + "politics"
+    entertainment_set =  "."+ os.sep + "BBC News Summary" + os.sep + "News Articles" + os.sep + "entertainment"
+    tech_set = "."+ os.sep + "BBC News Summary" + os.sep + "News Articles" + os.sep + "tech"
+    category_sets.append(sports_set)
+    category_sets.append(business_set)
+    category_sets.append(politics_set)
+    category_sets.append(entertainment_set)
+    category_sets.append(tech_set)
+    ref_category_sets = []
+    ref_sports_set = "."+ os.sep + "BBC News Summary" + os.sep + "Summaries" + os.sep + "sport"
+    ref_business_set =  "."+ os.sep + "BBC News Summary" + os.sep + "Summaries" + os.sep + "business"
+    ref_politics_set =  "."+ os.sep + "BBC News Summary" + os.sep + "Summaries" + os.sep + "politics"
+    ref_entertainment_set =  "."+ os.sep + "BBC News Summary" + os.sep + "Summaries" + os.sep + "entertainment"
+    ref_tech_set = "."+ os.sep + "BBC News Summary" + os.sep + "Summaries" + os.sep + "tech"
+    ref_category_sets.append(ref_sports_set)
+    ref_category_sets.append(ref_business_set)
+    ref_category_sets.append(ref_politics_set)
+    ref_category_sets.append(ref_entertainment_set)
+    ref_category_sets.append(ref_tech_set)
+    return category_sets, ref_category_sets
+    
+
 ### MAIN ###
 
 print("Please make sure BBC News Summary is in the same directory as this script.")
@@ -519,6 +570,30 @@ while ipt != q:
         evaluation_list = build_document_list(testing_set)
         reference_list = build_document_list(reference_set)
         evaluation(evaluation_list, reference_list, inv_index)
+    elif ipt == '3': 
+        category_sets, ref_category_sets = build_category_sets()
+        evaluation_lists = []
+        reference_lists = []
+
+
+        for set in category_sets:
+            evaluation_lists.append(build_document_list(set))
+        
+        for set in ref_category_sets: 
+            reference_lists.append(build_document_list(set))
+
+
+        map_by_category = []
+        map_stdv_by_category = []
+        for i in range(len(evaluation_lists)):
+            map, map_stdv = evaluation(evaluation_lists[i],reference_lists[i],inv_index)
+            map_by_category.append(map)
+            map_stdv_by_category.append(map_stdv)
+        
+        build_comparison_graph(map_by_category,map_stdv_by_category)
+
+
+
     elif ipt == 'q':
         exit()
 
