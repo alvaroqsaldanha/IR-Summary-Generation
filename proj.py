@@ -107,7 +107,7 @@ def create_tf_dict(sentences,d):
             for doc in inv_index[term]:
                 if doc[0] == d:
                     tn = doc[1]
-            term_tf += tn/total_term_count
+            term_tf += math.log10(tn)
         tf_dict[sentence] = term_tf / sparse.csr_matrix.sum(X)
     return tf_dict
 
@@ -124,7 +124,7 @@ def create_tfidf_dict(sentences,d):
             for doc in inv_index[term]:
                 if doc[0] == d:
                     tn = doc[1]
-            term_tfidf += idfs[term] * (tn/total_term_count)
+            term_tfidf += idfs[term] * (1 + math.log10(tn))
         tfidf_dict[sentence] = term_tfidf / sparse.csr_matrix.sum(X)
     return tfidf_dict
 
@@ -332,12 +332,15 @@ def mean_average_precision(rank, ref_summary_sentences):
     average_precision = 0
     relevant_docs = 0
     total_retrieved_docs = 0
-    for sentence in rank.keys():
+    for sentence in rank:
         total_retrieved_docs += 1
-        if sentence in ref_summary_sentences:
+        if sentence in ref_summary_sentences:  
             relevant_docs += 1
             average_precision += relevant_docs / total_retrieved_docs
-    mean_average_precision = average_precision / len(ref_summary_sentences)
+    if relevant_docs > 0: 
+        mean_average_precision = average_precision  / relevant_docs
+    else: 
+        mean_average_precision = 0
     return mean_average_precision
 
 def plot_map_variation(map_for_p, x_axis_name, x_axis_values, doc): 
@@ -367,7 +370,7 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
         summary = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summary)
         summary_sentences = sent_tokenize(summary)
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,p_value,None)
-        map = mean_average_precision(sentence_dict,ref_summary_sentences)
+        map = mean_average_precision(summary_sentences,ref_summary_sentences)
         map_for_p.append(map)
         #print("Mean Average Precision for document " + doc + " for summaries with " + str(p_value) +" sentences:\n" + str(map) )
     plot_map_variation(map_for_p, "p_values", P, doc)
@@ -380,7 +383,7 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
         summary = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summary)
         summary_sentences = sent_tokenize(summary)
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,None,l_value)
-        map = mean_average_precision(sentence_dict,ref_summary_sentences)
+        map = mean_average_precision(summary_sentences,ref_summary_sentences)
         map_for_l.append(map)
         #print("Mean Average Precision for document " + doc + " for summaries with " + str(l_value) + " sentence size:\n" +str(map) )
     plot_map_variation(map_for_l,"l_values", L, doc)
@@ -402,7 +405,7 @@ def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tf
 
     for doc,summaryfile in zip(D,S):
         print("Status:" + doc)
-        full_rank = ranking(doc,"relevance",inv_index,model="tfidf")
+        full_rank = ranking(doc,"relevance",inv_index,model="bm25")
         rank = full_rank[2]
         file1 = open(summaryfile,"r")
         summarybody = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',file1.read())
