@@ -95,29 +95,35 @@ def indexing(D,preprocessing):
 
 #################### RANKING ####################
 
-def create_tf_dict(sentences,d):
+def create_tf_dict(sentences,d, textprocessing):
     tf_dict = {}
     total_term_count = term_count[d]
     for sentence in sentences:
         term_tf = 0
-        vectorizer = CountVectorizer()
+        if textprocessing == "bigram":
+            vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
+        else:
+            vectorizer = CountVectorizer()
         X = vectorizer.fit_transform([sentence])
         fileterms = vectorizer.get_feature_names_out()
         for term in fileterms:
             for doc in inv_index[term]:
                 if doc[0] == d:
                     tn = doc[1]
-            term_tf += math.log10(tn)
+            term_tf += 1 + math.log10(tn)
         tf_dict[sentence] = term_tf / sparse.csr_matrix.sum(X)
     return tf_dict
 
-def create_tfidf_dict(sentences,d):
+def create_tfidf_dict(sentences,d,textprocessing):
     tfidf_dict = {}
     total_term_count = term_count[d]
     for sentence in sentences:
         #print("Sentence:" + sentence)
         term_tfidf = 0
-        vectorizer = CountVectorizer()
+        if textprocessing == "bigram":
+            vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
+        else:
+            vectorizer = CountVectorizer()
         X = vectorizer.fit_transform([sentence])
         fileterms = vectorizer.get_feature_names_out()
         for term in fileterms:
@@ -128,12 +134,15 @@ def create_tfidf_dict(sentences,d):
         tfidf_dict[sentence] = term_tfidf / sparse.csr_matrix.sum(X)
     return tfidf_dict
 
-def create_bm25_dict(sentences,d):
+def create_bm25_dict(sentences,d,textprocessing):
     bm25_dict = {}
     total_term_count = term_count[d]
     for sentence in sentences:
         term_bm25 = 0
-        vectorizer = CountVectorizer()
+        if textprocessing == "bigram":
+            vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
+        else:
+            vectorizer = CountVectorizer()
         X = vectorizer.fit_transform([sentence])
         fileterms = vectorizer.get_feature_names_out()
         for term in fileterms:
@@ -157,18 +166,18 @@ def build_summary(sentence_dict,l):
             break
     return summary,sentence_count
 
-def ranking(d,order,I,p=8,l=500,model="tfidf"):
+def ranking(d,order,I,p=8,l=500,model="tfidf",textprocessing=None):
     file = open(d,"r")
     filebody = file.read()
     #print("1:" + repr(filebody))
     filebody = file_body_processing(filebody)
     sentences = sent_tokenize(filebody)
     if model == "tfidf":
-        sentence_dict = create_tfidf_dict(sentences,d)
+        sentence_dict = create_tfidf_dict(sentences,d,textprocessing)
     elif model == "tf":
-        sentence_dict = create_tf_dict(sentences,d)
+        sentence_dict = create_tf_dict(sentences,d,textprocessing)
     else:
-        sentence_dict = create_bm25_dict(sentences,d)
+        sentence_dict = create_bm25_dict(sentences,d,textprocessing)
     sorted_dict = dict(sorted(sentence_dict.items(), key=operator.itemgetter(1),reverse=True))
     full_dict = sorted_dict
     min_relevance = 0
@@ -364,7 +373,7 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
     map_for_p = []
     for p_value in P:
         sentence_dict = dict(itertools.islice(rank.items(), p_value))
-        summary = build_summary(sentence_dict,1000000)[0]
+        summary = build_summary(sentence_dict,2500)[0]
         summary = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',summary)
         summary = re.sub(r'([0-9])\.([A-Z])', r'\1. \2',summary)
         summary = re.sub(r'([a-z])\.([0-9])', r'\1. \2',summary)
@@ -389,7 +398,7 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
     plot_map_variation(map_for_l,"l_values", L, doc)
     return map_for_p, map_for_l
 
-def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tfidf"):
+def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tfidf", textprocessing=None):
     map_for_p_docs = []
     std_for_p_docs = []
 
@@ -405,7 +414,7 @@ def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tf
 
     for doc,summaryfile in zip(D,S):
         print("Status:" + doc)
-        full_rank = ranking(doc,"relevance",inv_index,model="bm25")
+        full_rank = ranking(doc,"relevance",inv_index,model="tf")
         rank = full_rank[2]
         file1 = open(summaryfile,"r")
         summarybody = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',file1.read())
@@ -439,7 +448,7 @@ def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tf
 
     plot_map_variation(map_for_l_docs, "l_value", L, "general")
 
-    average_p_precision = map_for_p_docs[4]
+    average_p_precision = map_for_p_docs[1]
     std_dv_map = statistics.stdev(std_for_p_docs)
     return average_p_precision, std_dv_map
     
@@ -552,13 +561,14 @@ summaries = '.\BBC News Summary\\Summaries\\'
 ipt = ''
 
 term_distribution(docs,summaries)
-indexing(docs,None)
+indexing(docs,"bigram")
 store_idfs()
 
 while ipt != q:
     print("\nType and enter:")
     print("1 - to get summaries for a specific file")
     print("2 - to perform system evaluation")
+    print("3 - to perform general system evaluation")
     print("q - to exit")
     ipt = input('>>> ')
     if ipt == '1':
@@ -572,7 +582,7 @@ while ipt != q:
         reference_set = input("Introduce the corresponding summary set for comparison:\n>>> ")
         evaluation_list = build_document_list(testing_set)
         reference_list = build_document_list(reference_set)
-        evaluation(evaluation_list, reference_list, inv_index)
+        evaluation(evaluation_list, reference_list, inv_index,textprocessing="")
     elif ipt == '3': 
         category_sets, ref_category_sets = build_category_sets()
         evaluation_lists = []
@@ -589,7 +599,7 @@ while ipt != q:
         map_by_category = []
         map_stdv_by_category = []
         for i in range(len(evaluation_lists)):
-            map, map_stdv = evaluation(evaluation_lists[i],reference_lists[i],inv_index)
+            map, map_stdv = evaluation(evaluation_lists[i],reference_lists[i],inv_index,model="tf",textprocessing="bigram")
             map_by_category.append(map)
             map_stdv_by_category.append(map_stdv)
         
