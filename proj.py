@@ -265,6 +265,8 @@ def create_mmr_rank(original_sentences,current_sentences,lb,summary):
     return sorted_mmr_rank
 
 def create_mmr_summary(original_sentences,current_sentences,lb,mmr_rank,summary,p,l):
+  if mmr_rank == None:
+    return summary
   most_relevant_sentence = list(mmr_rank.keys())[0]
   if p > 0 and (len(most_relevant_sentence) <= l):
     summary.append(most_relevant_sentence)
@@ -272,6 +274,8 @@ def create_mmr_summary(original_sentences,current_sentences,lb,mmr_rank,summary,
     l -= len(most_relevant_sentence)
     current_sentences.remove(most_relevant_sentence)
     new_mmr_rank = create_mmr_rank(original_sentences,current_sentences,lb,summary)
+    if new_mmr_rank == None:
+        return summary
     return create_mmr_summary(original_sentences,current_sentences,lb,new_mmr_rank,summary,p,l) 
   return summary 
 
@@ -337,9 +341,7 @@ def build_precision_recall_graph(doc,recall, precision, p, l):
     plt.plot(recall,precision)
     if(len(recall) == 0 ): 
         return 
-
     path = create_results_directory()
-
     if not os.path.isdir(path+"\\"+doc):
         os.mkdir(path+"\\"+doc)
     filename = "precision_recall_graph_" 
@@ -349,7 +351,6 @@ def build_precision_recall_graph(doc,recall, precision, p, l):
         filename+= str(l) +"_char_length"
     plt.savefig(path+"\\"+doc+"\\"+ filename)
     plt.clf()
-
 
 def build_precision_recall_curve(doc,ref_summary_sentences, summary_sentences, p, l): 
     total_retrieved_docs = 0
@@ -397,7 +398,6 @@ def plot_map_variation(map_for_p, x_axis_name, x_axis_values, doc):
     plt.savefig(path+"\\"+doc+"\\"+ filename)
     plt.clf()
 
-
 def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
     map_for_p = []
     for p_value in P:
@@ -410,9 +410,7 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,p_value,None)
         map = mean_average_precision(summary_sentences,ref_summary_sentences)
         map_for_p.append(map)
-        #print("Mean Average Precision for document " + doc + " for summaries with " + str(p_value) +" sentences:\n" + str(map) )
     plot_map_variation(map_for_p, "p_values", P, doc)
-
     map_for_l = []
     for l_value in L:
         summary = build_summary(rank,l_value)[0]
@@ -423,7 +421,6 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
         build_precision_recall_curve(doc,ref_summary_sentences,summary_sentences,None,l_value)
         map = mean_average_precision(summary_sentences,ref_summary_sentences)
         map_for_l.append(map)
-        #print("Mean Average Precision for document " + doc + " for summaries with " + str(l_value) + " sentence size:\n" +str(map) )
     plot_map_variation(map_for_l,"l_values", L, doc)
     return map_for_p, map_for_l
 
@@ -481,11 +478,6 @@ def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model = "
     std_dv_map = statistics.stdev(std_for_p_docs)
     return average_p_precision, std_dv_map
     
-
-
-
-        
-
 ### AUXILIARY FUNCTIONS ###
 
 def store_idfs():
@@ -587,9 +579,6 @@ def build_comparison_graph(map_by_category, map_stdv_by_category):
     plt.show()
     plt.clf()
     
-
-
-
 def build_category_sets(): 
     category_sets = []
     sports_set = "."+ os.sep + "BBC News Summary" + os.sep + "News Articles" + os.sep + "sport"
@@ -615,7 +604,6 @@ def build_category_sets():
     ref_category_sets.append(ref_tech_set)
     return category_sets, ref_category_sets
     
-
 ### MAIN ###
 
 print("Please make sure BBC News Summary is in the same directory as this script.")
@@ -624,7 +612,7 @@ docs = '.\BBC News Summary\\News Articles\\'
 summaries = '.\BBC News Summary\\Summaries\\'
 ipt = ''
 
-term_distribution(docs,summaries, textprocessing="noun_phrases")
+term_distribution(docs,summaries, textprocessing=None)
 indexing(docs,"bigram")
 store_idfs()
 
@@ -653,26 +641,16 @@ while ipt != q:
         category_sets, ref_category_sets = build_category_sets()
         evaluation_lists = []
         reference_lists = []
-
-
         for set in category_sets:
             evaluation_lists.append(build_document_list(set))
-        
         for set in ref_category_sets: 
             reference_lists.append(build_document_list(set))
-
-
         map_by_category = []
         map_stdv_by_category = []
         for i in range(len(evaluation_lists)):
             map, map_stdv = evaluation(evaluation_lists[i],reference_lists[i],inv_index,model=m,textprocessing=t)
             map_by_category.append(map)
             map_stdv_by_category.append(map_stdv)
-        
         build_comparison_graph(map_by_category,map_stdv_by_category)
-
-
-
     elif ipt == 'q':
         exit()
-
