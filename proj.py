@@ -15,6 +15,7 @@ import matplotlib.pyplot as plt
 import itertools
 import spacy
 import statistics 
+import numpy
 from scipy import spatial, sparse
 
 inv_index = {}
@@ -22,6 +23,7 @@ idfs = {}
 n_docs = 0
 term_count = {}
 avg_dl = 0
+nlp = spacy.load('en_core_web_sm')
 
 #################### TEXT PROCESSING AND INDEXING ####################
 
@@ -102,10 +104,19 @@ def create_tf_dict(sentences,d, textprocessing):
         term_tf = 0
         if textprocessing == "bigram":
             vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
+            X = vectorizer.fit_transform([sentence])
+            fileterms = vectorizer.get_feature_names_out()
+        elif textprocessing == "noun_phrases":
+            vectorizer = CountVectorizer()
+            X = vectorizer.fit_transform([sentence])
+            fileterms = vectorizer.get_feature_names_out()
+            aux = nlp(sentence)
+            for term in aux.noun_chunks: 
+                numpy.append(fileterms,term)
         else:
             vectorizer = CountVectorizer()
-        X = vectorizer.fit_transform([sentence])
-        fileterms = vectorizer.get_feature_names_out()
+            X = vectorizer.fit_transform([sentence])
+            fileterms = vectorizer.get_feature_names_out()
         for term in fileterms:
             for doc in inv_index[term]:
                 if doc[0] == d:
@@ -122,10 +133,19 @@ def create_tfidf_dict(sentences,d,textprocessing):
         term_tfidf = 0
         if textprocessing == "bigram":
             vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
+            X = vectorizer.fit_transform([sentence])
+            fileterms = vectorizer.get_feature_names_out()
+        elif textprocessing == "noun_phrases":
+            vectorizer = CountVectorizer()
+            X = vectorizer.fit_transform([sentence])
+            fileterms = vectorizer.get_feature_names_out()
+            aux = nlp(sentence)
+            for term in aux.noun_chunks: 
+                numpy.append(fileterms,term)
         else:
             vectorizer = CountVectorizer()
-        X = vectorizer.fit_transform([sentence])
-        fileterms = vectorizer.get_feature_names_out()
+            X = vectorizer.fit_transform([sentence])
+            fileterms = vectorizer.get_feature_names_out()
         for term in fileterms:
             for doc in inv_index[term]:
                 if doc[0] == d:
@@ -141,10 +161,19 @@ def create_bm25_dict(sentences,d,textprocessing):
         term_bm25 = 0
         if textprocessing == "bigram":
             vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
+            X = vectorizer.fit_transform([sentence])
+            fileterms = vectorizer.get_feature_names_out()
+        elif textprocessing == "noun_phrases":
+            vectorizer = CountVectorizer()
+            X = vectorizer.fit_transform([sentence])
+            fileterms = vectorizer.get_feature_names_out()
+            aux = nlp(sentence)
+            for term in aux.noun_chunks: 
+                numpy.append(fileterms,term)
         else:
             vectorizer = CountVectorizer()
-        X = vectorizer.fit_transform([sentence])
-        fileterms = vectorizer.get_feature_names_out()
+            X = vectorizer.fit_transform([sentence])
+            fileterms = vectorizer.get_feature_names_out()
         for term in fileterms:
             for doc in inv_index[term]:
                 if doc[0] == d:
@@ -166,7 +195,7 @@ def build_summary(sentence_dict,l):
             break
     return summary,sentence_count
 
-def ranking(d,order,I,p=8,l=500,model="tfidf",textprocessing=None):
+def ranking(d,order,I,p=8,l=500,model="tfidf",textprocessing="noun_phrases"):
     file = open(d,"r")
     filebody = file.read()
     #print("1:" + repr(filebody))
@@ -398,7 +427,7 @@ def summary_size_evaluation(doc,rank,ref_summary_sentences,P,L):
     plot_map_variation(map_for_l,"l_values", L, doc)
     return map_for_p, map_for_l
 
-def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tfidf", textprocessing=None):
+def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model = "tfidf", textprocessing="noun_phrases"):
     map_for_p_docs = []
     std_for_p_docs = []
 
@@ -414,7 +443,7 @@ def evaluation(D,S,I,P=[8,10,12,14,16],L=[500,750,1000,1500,2000,2500],model="tf
 
     for doc,summaryfile in zip(D,S):
         print("Status:" + doc)
-        full_rank = ranking(doc,"relevance",inv_index,model="tf")
+        full_rank = ranking(doc,"relevance",inv_index,model,textprocessing)
         rank = full_rank[2]
         file1 = open(summaryfile,"r")
         summarybody = re.sub(r'([a-z])\.([A-Z])', r'\1. \2',file1.read())
@@ -470,20 +499,38 @@ def build_document_list(path):
                 evaluation_list.append(os.path.join(dirName,name))
     return evaluation_list
 
-def term_distribution(docs,summaries):
+def term_distribution(docs,summaries, textprocessing):
     docs_content = []
     for dirName, subdirList, fileList in os.walk(docs):
         for name in fileList:
             file = open(os.path.join(dirName,name),"r")
             docs_content.append(file.read())
             file.close()
-    vectorizer = CountVectorizer()
-    X = vectorizer.fit_transform(docs_content)
-    terms = vectorizer.get_feature_names_out()
-    term_count = X.toarray().sum(axis=0)
+    if textprocessing == "bigram":
+        vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
+        X = vectorizer.fit_transform(docs_content)
+        terms = vectorizer.get_feature_names_out()
+        term_count = X.toarray().sum(axis=0)
+    elif textprocessing == "noun_phrases":
+        vectorizer = CountVectorizer()
+        X = vectorizer.fit_transform(docs_content)
+        terms = vectorizer.get_feature_names_out()
+        term_count = X.toarray().sum(axis=0)
+        aux = nlp(''.join(terms))
+        i = 0
+        for term in aux.noun_chunks: 
+            numpy.append(terms,term)
+            i+=1
+        term_count+=i
+    else:
+        vectorizer = CountVectorizer()
+        X = vectorizer.fit_transform(docs_content)
+        terms = vectorizer.get_feature_names_out()
+        term_count = X.toarray().sum(axis=0)
+        
     zip_iterator = zip(terms, term_count)
     sorted_dict = dict(sorted(dict(zip_iterator).items(), key=operator.itemgetter(1),reverse=True))
-    sorted_dict = dict(itertools.islice(sorted_dict.items(), 12))
+    sorted_dict = dict(itertools.islice(sorted_dict.items(), 30))
     plt.bar(sorted_dict.keys(), sorted_dict.values(), color ='maroon',
         width = 0.4)
     plt.xlabel("Term")
@@ -496,13 +543,30 @@ def term_distribution(docs,summaries):
             file = open(os.path.join(dirName,name),"r")
             summaries_content.append(file.read())
             file.close()
-    vectorizer = CountVectorizer()
-    X = vectorizer.fit_transform(summaries_content)
-    terms = vectorizer.get_feature_names_out()
-    term_count = X.toarray().sum(axis=0)
+    if textprocessing == "bigram":
+        vectorizer = CountVectorizer(analyzer = "word", ngram_range=(1,2))
+        X = vectorizer.fit_transform(docs_content)
+        terms = vectorizer.get_feature_names_out()
+        term_count = X.toarray().sum(axis=0)
+    elif textprocessing == "noun_phrases":
+        vectorizer = CountVectorizer()
+        X = vectorizer.fit_transform(docs_content)
+        terms = vectorizer.get_feature_names_out()
+        term_count = X.toarray().sum(axis=0)
+        aux = nlp(''.join(terms))
+        i=0
+        for term in aux.noun_chunks: 
+            numpy.append(terms,term)
+            i+=1
+        term_count+=i
+    else:
+        vectorizer = CountVectorizer()
+        X = vectorizer.fit_transform(docs_content)
+        terms = vectorizer.get_feature_names_out()
+        term_count = X.toarray().sum(axis=0)
     zip_iterator = zip(terms, term_count)
     sorted_dict = dict(sorted(dict(zip_iterator).items(), key=operator.itemgetter(1),reverse=True))
-    sorted_dict = dict(itertools.islice(sorted_dict.items(), 12))
+    sorted_dict = dict(itertools.islice(sorted_dict.items(), 30))
     plt.bar(sorted_dict.keys(), sorted_dict.values(), color ='maroon',
         width = 0.4)
     plt.xlabel("Term")
@@ -560,7 +624,7 @@ docs = '.\BBC News Summary\\News Articles\\'
 summaries = '.\BBC News Summary\\Summaries\\'
 ipt = ''
 
-term_distribution(docs,summaries)
+term_distribution(docs,summaries, textprocessing="noun_phrases")
 indexing(docs,"bigram")
 store_idfs()
 
@@ -582,8 +646,10 @@ while ipt != q:
         reference_set = input("Introduce the corresponding summary set for comparison:\n>>> ")
         evaluation_list = build_document_list(testing_set)
         reference_list = build_document_list(reference_set)
-        evaluation(evaluation_list, reference_list, inv_index,textprocessing="")
+        evaluation(evaluation_list, reference_list, inv_index,textprocessing = "noun_phrases")
     elif ipt == '3': 
+        m = input("Introduce the model you want to test:")
+        t = input("Introduce the text processing solution you want to test:")
         category_sets, ref_category_sets = build_category_sets()
         evaluation_lists = []
         reference_lists = []
@@ -599,7 +665,7 @@ while ipt != q:
         map_by_category = []
         map_stdv_by_category = []
         for i in range(len(evaluation_lists)):
-            map, map_stdv = evaluation(evaluation_lists[i],reference_lists[i],inv_index,model="tf",textprocessing="bigram")
+            map, map_stdv = evaluation(evaluation_lists[i],reference_lists[i],inv_index,model=m,textprocessing=t)
             map_by_category.append(map)
             map_stdv_by_category.append(map_stdv)
         
