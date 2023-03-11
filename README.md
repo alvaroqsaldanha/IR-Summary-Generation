@@ -14,7 +14,7 @@ A demo is provided [here](https://github.com/alvaroqsaldanha/Information-Retriev
 
 ## Unsupervised Summary Generation Example
 
-Original Text:
+### Original Text:
 
 ```
 Ink helps drive democracy in Asia
@@ -28,6 +28,8 @@ The author of one such article began a petition drive against the use of the ink
 In Serbia, for example, both Christian and Islamic leaders assured their populations that its use was not contrary to religion. Other rumours are associated with how to remove the ink - various soft drinks, solvents and cleaning products are put forward. However, in reality, the ink is very effective at getting under the cuticle of the thumb and difficult to wash off. The ink stays on the finger for at least 72 hours and for up to a week. The use of ink and readers by itself is not a panacea for election ills. The passage of the inking law is, nevertheless, a clear step forward towards free and fair elections." The country's widely watched parliamentary elections are scheduled for 27 February.
 David Mikosz works for the IFES, an international, non-profit organisation that supports the building of democratic societies.
 ```
+
+### Summary
 
 Using TF-IDF:
 
